@@ -1,0 +1,60 @@
+{
+    "name": "awcode/thaipromptpay",
+    "description": "Generate Thai PromptPay QR code payloads (EMVCo TLV) with support for phone, national ID, e-wallet, and Bill Payment with Ref1/Ref2. Laravel-friendly.",
+    "keywords": [
+        "promptpay",
+        "thailand",
+        "qr-code",
+        "qr",
+        "emvco",
+        "bill-payment",
+        "ref1",
+        "ref2",
+        "laravel",
+        "payment"
+    ],
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Awcode",
+            "email": "m@awcode.com"
+        }
+    ],
+    "require": {
+        "php": "^8.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0",
+        "bacon/bacon-qr-code": "^2.0",
+        "orchestra/testbench": "^8.0|^9.0"
+    },
+    "suggest": {
+        "bacon/bacon-qr-code": "^2.0 — required to render the payload as an SVG/PNG QR code image"
+    },
+    "autoload": {
+        "psr-4": {
+            "Awcode\\ThaiPromptpay\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Awcode\\ThaiPromptpay\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Awcode\\ThaiPromptpay\\Laravel\\ThaiPromptpayServiceProvider"
+            ],
+            "aliases": {
+                "ThaiPromptpay": "Awcode\\ThaiPromptpay\\Laravel\\Facades\\ThaiPromptpay"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
