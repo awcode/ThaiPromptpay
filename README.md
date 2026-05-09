@@ -1,8 +1,13 @@
 # Thai PromptPay
 
-Generate Thai PromptPay QR code payloads (EMVCo TLV) in PHP. Supports
-**phone numbers**, **national / tax IDs**, **e-wallet IDs**, and full
-**Bill Payment** with Ref1 / Ref2 reference codes for business transactions.
+Generate **and read** Thai PromptPay QR codes in PHP.
+
+- Generate payment-request QRs (EMVCo TLV) for **phone numbers**,
+  **national / tax IDs**, **e-wallet IDs**, and **Bill Payment** with
+  Ref1 / Ref2 reference codes for business transactions.
+- Parse payment-confirmation slip QRs (the unified ITMX Slip Verify Mini-QR
+  used by every Thai bank, plus the TrueMoney Wallet variant) — directly
+  from a payload string or from a slip image.
 
 Laravel-friendly: ships with a service provider, facade, and config —
 auto-discovered.
@@ -134,6 +139,9 @@ PROMPTPAY_BILLER_ID=099400015804189
 | `::nationalId(string $id)` | `Builder` | Thai NID / Tax ID |
 | `::eWallet(string $id)` | `Builder` | 15-digit e-wallet ID |
 | `::billPayment(string $billerId)` | `Builder` | Biller ID for Bill Payment |
+| `::parseSlip(string $payload)` | `SlipQr` | Parse a slip-verify Mini-QR payload string |
+| `::scanSlip(string $image)` | `SlipQr` | Decode + parse from an image (path / bytes / data URI) |
+| `::readSlip(string $input)` | `SlipQr` | Auto-detect payload string vs image |
 
 ### `Builder`
 
@@ -155,6 +163,77 @@ All mutators are immutable — they return a new builder.
 | `->svg(int $size = 300, int $margin = 1)` | SVG markup |
 | `->png(int $size = 300, int $margin = 1)` | Raw PNG bytes |
 | `->dataUri(int $size = 300, int $margin = 1, string $format = 'svg')` | `data:` URI |
+
+## Reading slip QRs
+
+After a Thai bank transfer, the payer's app prints/displays a slip with a
+QR. The package decodes that QR's structured contents, locally and offline.
+
+```php
+use Awcode\ThaiPromptpay\ThaiPromptpay;
+
+// From a payload string already extracted from the QR
+$slip = ThaiPromptpay::parseSlip('00460006...5102TH9104XXXX');
+
+// From a slip image (file path, bytes, or data URI)
+$slip = ThaiPromptpay::scanSlip('/path/to/slip.jpg');
+$slip = ThaiPromptpay::scanSlip(file_get_contents('slip.png'));
+$slip = ThaiPromptpay::scanSlip('data:image/png;base64,iVBORw0KG...');
+
+// Auto-detect: payload string or image
+$slip = ThaiPromptpay::readSlip($input);
+
+$slip->apiId;           // "000001"  (or "01" for TrueMoney variant)
+$slip->sendingBank;     // "014"     (3-digit ITMX SMART code)
+$slip->bankShortName;   // "SCB"
+$slip->bankNameEnglish; // "Siam Commercial Bank"
+$slip->bankNameThai;    // "ธนาคารไทยพาณิชย์"
+$slip->transRef;        // bank-issued transaction reference
+$slip->isTrueMoney();   // bool
+$slip->toArray();       // structured array
+```
+
+Image scanning requires `khanamiryan/qrcode-detector-decoder` (and `ext-gd`
+or `ext-imagick`). Install if you need it:
+
+```bash
+composer require khanamiryan/qrcode-detector-decoder
+```
+
+### What slip parsing does *not* do
+
+Decoding the QR tells you what the slip **claims**, not whether the
+transaction actually happened. The QR itself is unsigned — anyone can craft
+one with arbitrary fields and a valid CRC.
+
+True verification means asking the issuing bank "is transaction `transRef`
+real?" — and the Thai banks do not expose any anonymous public endpoint for
+that. Verification requires either:
+
+1. Bring your own bank Open API credentials (SCB Partners, K API, Bangkok
+   Bank Developer) — typically requires merchant onboarding, mTLS, and
+   per-bank monthly minimums.
+2. A third-party aggregator (SlipOK, EasySlip, RDCW, Thunder, etc.) that
+   licenses those bank APIs server-side.
+
+**Roadmap (v2):**
+
+- Aggregator-backed verification: SlipOK, EasySlip, RDCW.
+- Bank Open API adapters for shops with their own credentials (SCB Partners,
+  K API, Bangkok Bank Developer).
+- BYO-OCR cross-check helpers: compare a QR's `transRef` against text you've
+  extracted from the slip image — catches paste-job fakes where the QR and
+  visible transRef don't agree (does **not** catch amount-only tampering;
+  the QR has no amount to compare).
+- Optional Tesseract integration for those who want the OCR built in.
+
+v1 stays parse-only and has zero outbound network calls.
+
+### Bank codes
+
+The package resolves all major Thai bank codes (BBL, KBANK, KTB, SCB, BAY,
+TTB, GSB, BAAC, TISCO, UOB, CIMB, KKP, LHB, ICBC, …). Look up directly via
+`Awcode\ThaiPromptpay\Slip\BankCodes::lookup('014')`.
 
 ## How it works
 

@@ -27,10 +27,13 @@
     "require-dev": {
         "phpunit/phpunit": "^10.0",
         "bacon/bacon-qr-code": "^2.0",
+        "khanamiryan/qrcode-detector-decoder": "^1.0|^2.0",
         "orchestra/testbench": "^8.0|^9.0"
     },
     "suggest": {
-        "bacon/bacon-qr-code": "^2.0 — required to render the payload as an SVG/PNG QR code image"
+        "bacon/bacon-qr-code": "^2.0 — required to render generated payloads as SVG/PNG QR images",
+        "khanamiryan/qrcode-detector-decoder": "^1.0|^2.0 — required to scan slip QRs from image files",
+        "ext-gd": "Used by khanamiryan/qrcode-detector-decoder to read images (or use ext-imagick instead)"
     },
     "autoload": {
         "psr-4": {
