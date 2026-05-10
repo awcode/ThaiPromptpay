@@ -142,6 +142,9 @@ PROMPTPAY_BILLER_ID=099400015804189
 | `::parseSlip(string $payload)` | `SlipQr` | Parse a slip-verify Mini-QR payload string |
 | `::scanSlip(string $image)` | `SlipQr` | Decode + parse from an image (path / bytes / data URI) |
 | `::readSlip(string $input)` | `SlipQr` | Auto-detect payload string vs image |
+| `::slipOk(string $apiKey, string $branchId)` | `SlipOkVerifier` | Build a SlipOK aggregator verifier |
+| `::easySlip(string $apiKey)` | `EasySlipVerifier` | Build an EasySlip v2 aggregator verifier |
+| `->verify(string $input)` | `SlipVerification` | Verify with the configured default provider (Laravel) |
 
 ### `Builder`
 
@@ -216,18 +219,102 @@ that. Verification requires either:
 2. A third-party aggregator (SlipOK, EasySlip, RDCW, Thunder, etc.) that
    licenses those bank APIs server-side.
 
-**Roadmap (v2):**
+### Verifying with an aggregator (optional)
 
-- Aggregator-backed verification: SlipOK, EasySlip, RDCW.
-- Bank Open API adapters for shops with their own credentials (SCB Partners,
-  K API, Bangkok Bank Developer).
-- BYO-OCR cross-check helpers: compare a QR's `transRef` against text you've
-  extracted from the slip image — catches paste-job fakes where the QR and
-  visible transRef don't agree (does **not** catch amount-only tampering;
-  the QR has no amount to compare).
-- Optional Tesseract integration for those who want the OCR built in.
+Two providers are supported out of the box. Both are opt-in: the package
+makes no network calls unless you explicitly use a verifier.
 
-v1 stays parse-only and has zero outbound network calls.
+#### SlipOK
+
+```php
+use Awcode\ThaiPromptpay\ThaiPromptpay;
+
+$verifier = ThaiPromptpay::slipOk(
+    apiKey: env('SLIPOK_API_KEY'),
+    branchId: env('SLIPOK_BRANCH_ID'),
+);
+
+$result = $verifier->verify($slipImageOrPayload);
+
+$result->transRef;            // bank-issued transaction ref
+$result->amount;              // float, THB
+$result->paidAt;              // DateTimeImmutable
+$result->sender->name;        // displayName from SlipOK
+$result->sender->accountNumber; // masked, e.g. "xxx-x-x1234-x"
+$result->receiver->bankShort;
+```
+
+#### EasySlip (v2)
+
+```php
+$verifier = ThaiPromptpay::easySlip(
+    apiKey: env('EASYSLIP_API_KEY'),
+);
+
+$result = $verifier->verify($slipImageOrPayload);
+```
+
+Both verifiers return the same canonical [`SlipVerification`](src/Slip/Verify/SlipVerification.php)
+shape — provider-agnostic. The provider's untouched response is at
+`$result->raw` if you need fields the unified shape doesn't expose.
+
+#### Laravel: configure once, call as a one-liner
+
+Set the default provider and credentials in `config/thaipromptpay.php`
+(or via env):
+
+```env
+PROMPTPAY_VERIFIER=slipok
+SLIPOK_API_KEY=...
+SLIPOK_BRANCH_ID=...
+```
+
+Then anywhere in your app:
+
+```php
+use ThaiPromptpay;
+
+$result = ThaiPromptpay::verify($slipImageOrPayload);
+```
+
+Or inject the `Verifier` interface — the container resolves it from your
+config:
+
+```php
+use Awcode\ThaiPromptpay\Slip\Verify\Verifier;
+
+public function __construct(private Verifier $verifier) {}
+
+public function check(Request $request) {
+    return $this->verifier->verify($request->file('slip')->path())->toArray();
+}
+```
+
+#### Errors
+
+All transport, auth, and "slip not found" failures throw
+`Awcode\ThaiPromptpay\Slip\Verify\Exceptions\VerificationException` — the
+exception carries `provider`, `httpStatus`, and the raw `response` array
+so you can inspect provider-specific error codes (SlipOK numeric, EasySlip
+string).
+
+#### Input
+
+`verify(string $input)` accepts the same things as `readSlip()`:
+- A slip-verify Mini-QR payload string
+- An image file path
+- Raw image bytes
+- A base64 data URI
+
+If you pass an image, the package decodes the QR locally (via
+khanamiryan/qrcode-detector-decoder) and forwards only the payload string
+to the aggregator. The image itself is never uploaded.
+
+### Bank Open APIs (deferred)
+
+Some merchants have direct Open API access (SCB Partners, K API, Bangkok
+Bank Developer) — adapters for those will land in v2 and require merchant
+credentials + mTLS / JWT signing.
 
 ### Bank codes
 

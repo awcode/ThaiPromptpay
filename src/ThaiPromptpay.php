@@ -7,6 +7,11 @@ namespace Awcode\ThaiPromptpay;
 use Awcode\ThaiPromptpay\Slip\Parser as SlipParser;
 use Awcode\ThaiPromptpay\Slip\Scanner as SlipScanner;
 use Awcode\ThaiPromptpay\Slip\SlipQr;
+use Awcode\ThaiPromptpay\Slip\Verify\EasySlipVerifier;
+use Awcode\ThaiPromptpay\Slip\Verify\SlipOkVerifier;
+use Awcode\ThaiPromptpay\Slip\Verify\SlipVerification;
+use Awcode\ThaiPromptpay\Slip\Verify\Transport\Transport;
+use Awcode\ThaiPromptpay\Slip\Verify\Verifier;
 
 /**
  * Top-level entry point for the package.
@@ -36,6 +41,10 @@ use Awcode\ThaiPromptpay\Slip\SlipQr;
  */
 class ThaiPromptpay
 {
+    public function __construct(private readonly ?Verifier $verifier = null)
+    {
+    }
+
     public static function phone(string $phone): Builder
     {
         return Builder::forPhone($phone);
@@ -89,5 +98,45 @@ class ThaiPromptpay
         }
 
         return self::scanSlip($input);
+    }
+
+    /**
+     * Build a SlipOK verifier (slipok.com).
+     *
+     *   ThaiPromptpay::slipOk($apiKey, $branchId)->verify($payloadOrImage);
+     */
+    public static function slipOk(string $apiKey, string $branchId, ?Transport $transport = null): SlipOkVerifier
+    {
+        return new SlipOkVerifier($apiKey, $branchId, $transport);
+    }
+
+    /**
+     * Build an EasySlip v2 verifier (easyslip.com).
+     *
+     *   ThaiPromptpay::easySlip($apiKey)->verify($payloadOrImage);
+     */
+    public static function easySlip(string $apiKey, ?Transport $transport = null): EasySlipVerifier
+    {
+        return new EasySlipVerifier($apiKey, $transport);
+    }
+
+    /**
+     * Verify a slip via the configured default Verifier.
+     *
+     * Requires a Verifier to have been injected (via Laravel config + the
+     * service provider, or by constructing `new ThaiPromptpay($verifier)`
+     * yourself). Otherwise use the explicit ::slipOk() / ::easySlip() factories.
+     */
+    public function verify(string $input): SlipVerification
+    {
+        if ($this->verifier === null) {
+            throw new \LogicException(
+                'No default Verifier is configured. Either set thaipromptpay.verifier.default'
+                . ' in config and supply credentials, or use ThaiPromptpay::slipOk(...)->verify($input)'
+                . ' / ThaiPromptpay::easySlip(...)->verify($input) directly.'
+            );
+        }
+
+        return $this->verifier->verify($input);
     }
 }
